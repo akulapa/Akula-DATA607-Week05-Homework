@@ -1,0 +1,327 @@
+---
+title: "Akula-DATA607-Week05-Homework"
+author: "Pavan Akula"
+date: "March 01, 2017"
+output: html_document
+---
+
+This assignment is about using R to tidy the given data, moving between "wide" and "long" formats to best support our analysis. Following libraries will be used "base R", tidyr and dplyr to complete the assignment.
+
+Load the libraries
+```{r , echo=T, message=F}
+#library(plyr)     
+library(tidyr)    # gather() and spread() functions are used to tidy the data
+library(dplyr)    # functions select(), summarise() and filter() are from this library
+library(stringr)  # used for pattern matching and data cleansing 
+```
+
+Sample CSV file is created using data instructions provided in **_Assignment Tidying and Transforming Data.pdf._**
+
+```{r , echo=T}
+localDir <- getwd()
+flightsFile <- paste(str_trim(localDir),"//Flights.csv",sep="")
+
+# Data into a data frame
+flights.raw <- read.csv(flightsFile, header = T)
+
+
+# Rename the column names accordingly
+flights.raw <- rename(flights.raw, `Los Angeles` = `Los.Angeles`, `San Diego` =`San.Diego`, `San Francisco` = `San.Francisco`, Airline = X, ArrivalInfo = `X.1`)
+
+flights.raw
+
+```
+
+```{r , echo=T}
+# Remove rows that are empty.
+# flights.raw <- flights.raw %>% filter(`Los Angeles` != "NA")
+
+flights.raw <- flights.raw %>%
+  filter(!is.na(`Los Angeles`))
+
+flights.raw
+
+```
+
+```{r , echo=T}
+# Format data
+# 2 rows make up 1 row, following command populate Airline name in second row.
+# Fill in missing data.
+
+flights.raw[seq(2,nrow(flights.raw),2),1] <- flights.raw[seq(1,nrow(flights.raw),2),1]
+
+flights.raw
+
+```
+
+```{r , echo=T}
+# tidy data
+# flights.raw dataset has 3 variables(Airline, ArrivalInfo, Cities) and 2 observations(on time, delayed).
+# 1. Airline has 2 possible values (Alaska, AM West)
+# 2. ArrivalInfo has 2 possible values(on time and delayed)
+# 3. Cities has 5 possible values(Los Angeles, Phoenix, San Diego, San Francisco, Seattle)
+# 4. Observations have 20 values (497,221,212,503,1841,62,12,20,102,305,694,4840,383,320,201,117,415,65,129,61)
+
+flights.table1 <- flights.raw %>% 
+  gather(City, Count, -Airline, -ArrivalInfo, na.rm = TRUE)
+
+# A tidy version of the flights.raw data looks like this
+flights.table1
+```
+
+Data set is mostly tidy except for **_ArrivalInfo_** column. **_ArrivalInfo_** stores the names of variables.
+
+```{r , echo=T}
+# Expand rows into columns
+
+flights.table2 <- flights.table1 %>% 
+  spread(ArrivalInfo, Count) %>%
+  select (Airline, City,`on time`, delayed)
+
+flights.table2
+```
+
+Analysis of the data.
+
+```{r , echo=T}
+# Add a new column to find total flights by airline using mutate function
+
+flights.table3 <- flights.table2 %>%
+  mutate(TotalFlights = flights.table2$`on time`+flights.table2$delayed , 
+         PercentageOfOnTime = round(flights.table2$`on time` * 100/TotalFlights,2) ,
+         PercentageOfDelay = round(flights.table2$delayed * 100/TotalFlights,2)
+        ) %>%
+  filter(City %in% c("Los Angeles","Phoenix")) %>%
+  select(Airline,City,PercentageOfOnTime,PercentageOfDelay) %>%
+  arrange(City,Airline,PercentageOfDelay)
+
+
+# By looking at the data for cities Los Angeles and Phoenix both airlines perform close enough. However, ALASKA airlines is better with on time arrival.
+flights.table3
+```
+
+```{r , echo=T}
+# Data for San Diego, San Francisco and Seattle
+
+flights.table3 <- flights.table2 %>%
+  mutate(TotalFlights = flights.table2$`on time`+flights.table2$delayed , 
+         PercentageOfOnTime = round(flights.table2$`on time` * 100/TotalFlights,2) ,
+         PercentageOfDelay = round(flights.table2$delayed * 100/TotalFlights,2)
+        ) %>%
+  filter(City %in% c("San Diego","San Francisco","Seattle")) %>%
+  select(Airline,City,PercentageOfOnTime,PercentageOfDelay) %>%
+  arrange(City,Airline,PercentageOfDelay)
+
+
+# By looking at the data for cities San Diego, San Francisco and Seattle, ALASKA airlines is better with on time arrival and also has less delays.
+flights.table3
+```
+
+Additional analysis, Seattle airport is used as example.
+
+```{r, echo=T, warning=F}
+# Data for Seattle
+
+flights.table3 <- flights.table1 %>% 
+  filter(City == "Seattle") %>%
+  select(Airline,ArrivalInfo,Count) %>%
+  spread(ArrivalInfo,Count)
+
+# Bind row totals
+
+flights.table3$Totals <- rowSums(flights.table3[,-1] )
+
+# Bind column totals
+
+flights.table3 %<>%
+  summarise(Airline = "Totals",
+            delayed = sum(delayed),
+            `on time` = sum(`on time`),
+            Totals = sum(Totals)) %>%
+  bind_rows(flights.table3,.)
+
+flights.table3
+```
+Assuming ALASKA and AM WEST are the olny airlines flying to Seattle,
+
+1. Given random flight being delayed at Seattle airport, probability that it belongs to ALASKA airlines : **`r round(flights.table3[1,2]/flights.table3[1,4],2)`**
+
+2. Given random flight being delayed at Seattle airport, probability that it belongs to AM WEST airlines : **`r round(flights.table3[2,2]/flights.table3[2,4],2)`**
+
+3. Given random flight being on time at Seattle airport, probability that it belongs to ALASKA airlines : **`r round(flights.table3[1,3]/flights.table3[1,4],2)`**
+
+4. Given random flight being on time at Seattle airport, probability that it belongs to AM WEST airlines : **`r round(flights.table3[2,3]/flights.table3[2,4],2)`**
+
+5. Of all the airlines flying to Seattle, percentage of ALASKA airlines flights : **`r round(flights.table3[1,4] * 100/flights.table3[3,4],2)`**
+
+6. Of all the airlines flying to Seattle, percentage of AM WEST airlines flights : **`r round(flights.table3[2,4] * 100 /flights.table3[3,4],2)`**
+
+###Conclusion:
+**_It is fair to say ALASKA airlines has better on time flights over AM WEST airlines._**
+
+
+# Last week's project without using sqldf library
+
+
+Libraries used for this project.
+
+```{r , echo=TRUE}
+library(readr)      # used for reading the text file
+library(stringr)    # used for extracting text using regular expressions
+library(tidyr)      # replaced sqldf 
+library(dplyr)      # replaced sqldf
+library(utils)      # used for generating CSV file
+```
+
+Load *_Chess Tournament Cross Table_* file. 
+
+```{r , echo=TRUE}
+# Get local directory and load the file
+
+localDir <- getwd()
+chessFile <- paste(str_trim(localDir),"//tournamentinfo.txt",sep="")
+
+# Skip top 3 lines as it contains header info
+
+chess.text<-read_lines(chessFile,skip = 3)
+head(chess.text,10)
+```
+
+There are total of 64 players. File needs formatting in order to perform calculations and generate CSV output.
+
+```{r , echo=TRUE}
+# First level of formatting removes hypen("-") characters
+
+chess.text.level1 <- gsub("-","",chess.text)
+head(chess.text.level1, 6)
+```
+```{r , echo=TRUE}
+# Second level of formatting removes empty lines
+# This makes a continous data without newline characters 
+
+chess.text.level2 <- paste(unlist(chess.text.level1), collapse = " ")
+head(chess.text.level2,10)
+```
+
+```{r , echo=TRUE}
+# Add extra characters at the end of text data. This helps read complete data. 
+# If extra characters are not added, last line will be skipped. 
+
+chess.text.level2 <- paste(chess.text.level2,"_*_*_*_")
+
+# Extract the text using pattern repeating 180 characters
+# Idea is to combine 2 lines of each player's info into single line
+# Once combined, information about single player takes 180 characters
+
+pattern <- "[[:print:]]{180}"
+chess.text.level3 <- unlist(str_extract_all(chess.text.level2, pattern = pattern))
+head(chess.text.level3,3)
+```
+
+```{r , echo=TRUE}
+# Each player has about 20 columns of information. Split the single string into 20 columns
+
+chess.data <- data.frame(unlist(str_split_fixed(chess.text.level3, "\\|", 21)))
+head(chess.data, 5)
+```
+
+```{r , echo=TRUE}
+# Using regular expressions extract the pre match rating for each player
+
+pattern = "(R:\\s+[[:digit:]]{3,4})"
+chess.preGameRating <- unlist(str_extract(string = chess.data[,12], pattern = pattern))
+
+# Get the pre-game rating
+pattern = "[[:digit:]]{3,4}"
+chess.preGameRating <- str_extract(string = chess.preGameRating, pattern = pattern)
+chess.preGameRating <- data.frame(chess.data, preGameRating = chess.preGameRating)
+
+head(chess.preGameRating, 5)
+```
+
+```{r , echo=TRUE}
+# Format the column type
+
+chess.preGameRating$X1 <- as.numeric(as.character(chess.preGameRating$X1))
+chess.preGameRating$preGameRating <- as.numeric(as.character(chess.preGameRating$preGameRating))
+
+```
+
+```{r , echo=TRUE}
+# Extract the information about opponent for each round
+# Opponent player info is left as "NA" values if player did not play or got bye
+
+# Get opponet playerID
+pattern = "[[:digit:]]{1,2}"
+
+chess.preGameRating$G1opponent = as.numeric(str_match(string = chess.preGameRating$X4, pattern = pattern))
+chess.preGameRating$G2opponent = as.numeric(str_match(string = chess.preGameRating$X5, pattern = pattern))
+chess.preGameRating$G3opponent = as.numeric(str_match(string = chess.preGameRating$X6, pattern = pattern))
+chess.preGameRating$G4opponent = as.numeric(str_match(string = chess.preGameRating$X7, pattern = pattern))
+chess.preGameRating$G5opponent = as.numeric(str_match(string = chess.preGameRating$X8, pattern = pattern))
+chess.preGameRating$G6opponent = as.numeric(str_match(string = chess.preGameRating$X9, pattern = pattern))
+chess.preGameRating$G7opponent = as.numeric(str_match(string = chess.preGameRating$X10, pattern = pattern))
+
+# Get required data
+chess.data <- chess.preGameRating %>% 
+  select(playerID = as.numeric(X1),playerName = X2, playerPoints = as.numeric(X3), playerState = X11, preGameRating, G1opponent,G2opponent,G3opponent,G4opponent,G5opponent,G6opponent,G7opponent)
+
+# Convert data from factors to character
+
+chess.data$playerName <- as.character(chess.data$playerName)
+chess.data$playerState <- as.character(chess.data$playerState)
+chess.data$playerPoints <- as.character(chess.data$playerPoints)
+
+# Remove extra spaces
+
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+chess.data$playerState <- trim(chess.data$playerState)
+chess.data$playerName <- trim(chess.data$playerName)
+chess.data$playerPoints <- trim(chess.data$playerPoints)
+
+# Player 62 did not play 2, 3 or 4 games
+tail(chess.data,10)
+```
+
+```{r , echo=TRUE}
+# Tidy all data, convert all the opponet values into rows
+# opponent is new column with values(G1opponent, G2opponent, ... G7opponent)
+# n is the column that stored values for opponetID
+
+chess.tidy.data <- chess.data %>% 
+  gather(opponent, n, -playerID, -playerName, -playerState, -preGameRating, -playerPoints, na.rm = TRUE) %>%
+  arrange(playerID)
+
+# Rename the column
+chess.tidy.data <-  rename(chess.tidy.data, opponentID = n)
+head(chess.tidy.data,15)
+
+# Remove the column that is not being used.
+chess.tidy.data$opponent <- NULL
+```
+
+```{r , echo=TRUE}
+# Following code joins chess.tidy.data and chess.data using "opponentID" = "playerID" and extracts opponentID pre-game rating.
+# It summarises data using playerID and playerName, this gives sum of opponent ratings and number games played.
+# Finally uses mutate to calculate average opponent ratings
+# And saves required data to chess.rating data frame
+
+chess.rating <- chess.tidy.data %>% inner_join(chess.data, by = c("opponentID" = "playerID")) %>%
+  select (playerID, playerName = playerName.x, opponentID, opponentPlayer = playerName.y , opponentRating = as.numeric(preGameRating.y)) %>%
+  group_by (playerID,playerName) %>% 
+  summarise(opponentRatingSum = sum(opponentRating), numGames = n()) %>% 
+  inner_join(chess.data, by = ("playerID")) %>% 
+  select (playerID, playerName = playerName.x, playerPoints, playerState, preGameRating, opponentRatingSum, numGames) %>% 
+  mutate(avgOppPreGameRating = round(opponentRatingSum / numGames,0)) %>% 
+  select (playerID, playerName, playerPoints, playerState, preGameRating, avgOppPreGameRating)
+
+
+head(chess.rating,10)
+```
+
+```{r, echo=TRUE}
+# Generate CSV files
+
+chessOutFile <- paste(str_trim(localDir),"//chessOutFile.csv",sep="")
+write.table(chess.rating, file = chessOutFile, row.names = FALSE, sep = ",")
+```
