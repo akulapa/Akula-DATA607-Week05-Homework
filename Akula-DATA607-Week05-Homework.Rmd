@@ -9,7 +9,6 @@ This assignment is about using R to tidy the given data, moving between "wide" a
 
 Load the libraries
 ```{r , echo=T, message=F}
-#library(plyr)     
 library(tidyr)    # gather() and spread() functions are used to tidy the data
 library(dplyr)    # functions select(), summarise() and filter() are from this library
 library(stringr)  # used for pattern matching and data cleansing 
